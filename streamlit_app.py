@@ -209,7 +209,6 @@ with st.sidebar:
     else:
         jd = st.text_area("Job Description")
 
-
 if st.sidebar.button("Analyze"):
     if uploaded_cvs and jd:
         progress_bar = st.progress(0)
@@ -238,10 +237,10 @@ if st.sidebar.button("Analyze"):
                 "speculation": cv_analysis['speculation'],
             }
 
-            progress_bar.progress((i+1)/len(uploaded_cvs))
-            status_text.text(f"Analyzing... {round((i+1)/len(uploaded_cvs)*100, 1)}% Done")
+            progress_bar.progress((i + 1) / len(uploaded_cvs))
+            status_text.text(f"Analyzing... {round((i + 1) / len(uploaded_cvs) * 100, 1)}% Done")
         df = pd.DataFrame.from_dict(candidates, orient='index')
-        df['reason'] = df['fit']+df['speculation']
+        df['reason'] = df['fit'] + df['speculation']
         status_text = st.text('Scoring CVs...')
         scores = get_candidate_scores(df[['file_name', 'reason', 'requirement_score']])
         for c in candidates.keys():
@@ -250,7 +249,8 @@ if st.sidebar.button("Analyze"):
             else:
                 candidates[c]['score'] = -1
 
-        st.session_state['sorted_candidates'] = dict(sorted(candidates.items(), key=lambda x: (x[1]['score']), reverse=True))
+        st.session_state['sorted_candidates'] = dict(
+            sorted(candidates.items(), key=lambda x: (x[1]['score']), reverse=True))
         st.session_state['errors'] = errors
         progress_bar.empty()
         status_text.empty()
@@ -299,7 +299,8 @@ if "sorted_candidates" in st.session_state:
     df = pd.DataFrame.from_dict(sorted_candidates, orient='index')
     df = df[['file_name', 'name', 'summary', 'requirement_score', 'fit', 'speculation', 'score']]
     df['score'] = df['score'].apply(lambda x: 'N/A' if x == -1 else x)
-    df.columns = ['Original CV file name', 'Candidate name', 'CV summary', 'Requirements score', 'Does the candidate fit the position?', 'Would the candidate succeed in the position', 'Final score']
+    df.columns = ['Original CV file name', 'Candidate name', 'CV summary', 'Requirements score',
+                  'Does the candidate fit the position?', 'Would the candidate succeed in the position', 'Final score']
     download_all.download_button(
         label="Download all as csv",
         data=df.to_csv(index=False).encode('utf-8'),
@@ -312,4 +313,3 @@ if "sorted_candidates" in st.session_state:
         st.write(', '.join(map(str, errors)))
 
     display_footer_section()
-
