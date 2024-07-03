@@ -12,7 +12,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from io import BytesIO
 
 openai_token = st.secrets["openai_token"]
-LOGO_IMAGE_PATH = os.path.abspath("./static/keboola.png")
+LOGO_IMAGE_PATH = os.path.abspath(".app/static/keboola.png")
 
 # Setting page config
 st.set_page_config(page_title="CV Analyzer")
