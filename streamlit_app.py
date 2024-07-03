@@ -12,7 +12,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from io import BytesIO
 
 openai_token = st.secrets["openai_token"]
-LOGO_IMAGE_PATH = os.path.abspath("./app/static/keboola.png")
+LOGO_IMAGE_PATH = os.path.abspath("./static/keboola.png")
 
 # Setting page config
 st.set_page_config(page_title="CV Analyzer")
@@ -244,7 +244,7 @@ if st.sidebar.button("Analyze"):
             status_text.text(f"Analyzing... {round((i + 1) / len(uploaded_cvs) * 100, 1)}% Done")
         df = pd.DataFrame.from_dict(candidates, orient='index')
         df['reason'] = df['fit'] + df['speculation']
-        status_text = st.text('Scoring CVs...')
+        status_text.text('Scoring CVs...')
         scores = get_candidate_scores(df[['file_name', 'reason', 'requirement_score']])
         for c in candidates.keys():
             if c in scores.keys():
