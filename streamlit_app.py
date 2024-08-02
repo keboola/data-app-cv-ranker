@@ -10,12 +10,23 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from io import BytesIO
+from kbcstorage.client import Client
+import csv
+import requests
+from striprtf.striprtf import rtf_to_text
+
 
 openai_token = st.secrets["openai_token"]
+lever_token = st.secrets["lever_token"]
+kbc_url = st.secrets["kbc_url"]
+kbc_token = st.secrets["kbc_token"]
+lever_bucket = 'in.c-lever'
+
+client = Client(kbc_url, kbc_token)
 LOGO_IMAGE_PATH = os.path.abspath("./app/static/keboola.png")
 
 # Setting page config
-st.set_page_config(page_title="CV Analyzer")
+st.set_page_config(page_title="Keboola Resume Analyzer")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -118,6 +129,31 @@ def get_openai_response(ai_setup, prompt, api_key):
         return f"An error occurred: {e}"
 
 
+def get_dataframe(table_name):
+    """
+    Reads the provided table from the specified table in Keboola Connection.
+
+    Args:
+        table_name (str): The name of the table to write the data to.
+
+    Returns:
+        The table as dataframe
+    """
+    table_detail = client.tables.detail(table_name)
+    client.tables.export_to_file(table_id=table_name, path_name="")
+    list = client.tables.list()
+    with open("./" + table_detail["name"], mode="rt", encoding="utf-8") as in_file:
+        lazy_lines = (line.replace("\0", "") for line in in_file)
+        reader = csv.reader(lazy_lines, lineterminator="\n")
+    if os.path.exists("data.csv"):
+        os.remove("data.csv")
+    else:
+        print("The file does not exist")
+    os.rename(table_detail["name"], "data.csv")
+    data = pd.read_csv("data.csv")
+    return data
+
+
 def read_pdf(file):
     # Function to read a PDF file and return its text
     pdf_reader = PyPDF2.PdfReader(file)
@@ -192,6 +228,35 @@ def create_pdf(pdf_text):
     return buffer
 
 
+def download_and_extract_rtf(url):
+    headers = {
+        'authorization': lever_token
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        rtf_content = response.text
+        return rtf_to_text(rtf_content)
+    else:
+        print(f"Failed to download the file. Status code: {response.status_code}")
+        return None
+
+
+def prepare_data():
+    opportunities = get_dataframe(lever_bucket + '.opportunities')
+    opportunities = opportunities[['id', 'name', 'urls_show']]
+    applications = get_dataframe(lever_bucket + '.applications')
+    applications = applications[['posting', 'opportunityId']]
+    postings = get_dataframe(lever_bucket + '.postings')
+    postings = postings[['id', 'content_description', 'state', 'text', 'urls_show']]
+    resumes = get_dataframe(lever_bucket + '.resumes')
+    resumes = resumes[['parent_id', 'file_downloadUrl', 'file_name']]
+    cvs = pd.merge(postings, applications, how='left', left_on=['id'], right_on=['posting'])
+    cvs = pd.merge(cvs, opportunities, how='left', left_on=['opportunityId'], right_on=['id'])
+    cvs = pd.merge(cvs, resumes, how='left', left_on=['opportunityId'], right_on=['parent_id'])
+    st.session_state.cvs = cvs
+    st.session_state.postings = postings
+
+
 # Streamlit app
 st.image(LOGO_IMAGE_PATH)
 hide_img_fs = """
@@ -201,37 +266,83 @@ hide_img_fs = """
         </style>
         """
 st.markdown(hide_img_fs, unsafe_allow_html=True)
-title, download_all = st.columns([5, 1])
-title.title("CV Analyzer")
-with st.sidebar:
-    # Upload CV files
-    uploaded_cvs = st.file_uploader("Upload up to 70 CV PDF files", accept_multiple_files=True, type=["pdf"])
-    jd_option = st.selectbox("Upload job description as", ["Free text", "PDF"])
-    if jd_option == 'PDF':
-        jd = st.file_uploader("Upload the CV template PDF file", type=["pdf"])
-    else:
-        jd = st.text_area("Job Description")
 
-if st.sidebar.button("Analyze"):
-    if uploaded_cvs and jd:
-        progress_bar = st.progress(0)
-        status_text = st.text('Analyzing... 0% Done')
+st.markdown("""
+<style>
+.big-font {
+    font-size:42px !important;
+    font-weight: bold !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        if jd_option == 'PDF':
-            job_description = read_pdf(jd)
-        else:
-            job_description = jd
-        candidates = {}
-        errors = []
-        for i, cv in enumerate(uploaded_cvs):
-            cv_text = read_pdf(cv)
+st.markdown(
+    '<div class="big-font"><span style="color:#1f8fff;">Keboola</span> Resume Analyzer</div>',
+    unsafe_allow_html=True)
+
+
+if "cvs" not in st.session_state:
+    prepare_data()
+cvs = st.session_state.cvs
+postings = st.session_state.postings
+button_style = """
+    <style>
+    .stButton > button {
+        width: 100%;
+        border-radius: 10px;
+    }
+    </style>
+    """
+
+
+back_container = st.container()
+back_container.markdown(button_style, unsafe_allow_html=True)
+settings_container = st.container()
+reviews_container = st.container()
+candidates = {}
+errors = []
+
+
+if "screen" not in st.session_state:
+    st.session_state.screen = 'settings'
+screen = st.session_state.screen
+if screen == 'settings':
+    settings_container.info(
+        "The Keboola AI-Powered Resume Matching Automation Template gathers open positions from your LEVER (other HRIS with API are coming), processes all applications for each job opening, and provides a sorted list of resumes with a match quality score and reasoning for this score. Access to the application and data is restricted to authorized HR personnel, ensuring required privacy and security. The final hiring decision remains with the HR team, supported by Gen AI insights.",
+        icon="ℹ️"
+    )
+    job_posting = settings_container.selectbox("Select a Vacancy", postings['text'].to_list())
+    posting_url = postings[postings['text'] == job_posting]['urls_show']
+    settings_container.selectbox("Vacancy Link", posting_url.to_list(), disabled=True)
+    st.session_state.applicants = cvs[cvs['text'] == job_posting].reset_index(drop=True)
+    st.session_state.job_description = postings[postings['text'] == job_posting]['content_description']
+    settings_container.success(f"Found {len(st.session_state.applicants)} resumes that meet your requirements", icon="✅")
+    loading_container = settings_container.container()
+    if "cvs" in st.session_state:
+        container = settings_container.container()
+        with container:
+            col1, col2, col3 = st.columns([3, 2, 3])
+            # Place the button in the center column
+            with col2:
+                analyze_button = st.button("Analyze Resumes")
+
+        ChangeButtonColour("Analyze Resumes", "#FFFFFF", "#1EC71E", "#1EC71E")
+
+    if analyze_button:
+        st.session_state.screen = 'cvs'
+        progress_bar = loading_container.progress(0)
+        status_text = loading_container.text('Analyzing... 0% Done')
+        applicants = st.session_state.applicants
+        job_description = st.session_state.job_description
+        for index, row in applicants.iterrows():
+            cv_text = download_and_extract_rtf(row['file_downloadUrl'])
             cv_analysis = analyze_cv(cv_text, job_description)
             if cv_analysis is None:
-                errors.append(cv.name)
+                errors.append(row['name'])
                 continue
-            candidates[cv.name] = {
-                'file_name': cv.name,
-                'cv_file': cv,
+            candidates[row['file_name']] = {
+                'file_name': row['file_name'],
+                'url': row['urls_show_y'],
                 'cv_text': cv_text,
                 'name': cv_analysis['name'],
                 'summary': cv_analysis['summary'],
@@ -239,9 +350,8 @@ if st.sidebar.button("Analyze"):
                 "fit": cv_analysis['fit'],
                 "speculation": cv_analysis['speculation'],
             }
-
-            progress_bar.progress((i + 1) / len(uploaded_cvs))
-            status_text.text(f"Analyzing... {round((i + 1) / len(uploaded_cvs) * 100, 1)}% Done")
+            progress_bar.progress((index + 1) / len(applicants))
+            status_text.text(f"Analyzing... {round((index + 1) / len(applicants) * 100, 1)}% Done")
         df = pd.DataFrame.from_dict(candidates, orient='index')
         df['reason'] = df['fit'] + df['speculation']
         status_text.text('Scoring CVs...')
@@ -257,62 +367,71 @@ if st.sidebar.button("Analyze"):
         st.session_state['errors'] = errors
         progress_bar.empty()
         status_text.empty()
-    else:
-        st.error('Please upload all necessary files and provide a job description.', icon="🚨")
-ChangeButtonColour("Analyze", "#FFFFFF", "#1EC71E", "#1EC71E")
+        st.rerun()
 
-if "sorted_candidates" in st.session_state:
-    sorted_candidates = st.session_state['sorted_candidates']
-    errors = st.session_state['errors']
-    text = f"Analyzed {len(sorted_candidates)}/{len(uploaded_cvs)} CV files. "
-    st.text(text)
-    if errors:
-        st.text("See files that couldn't be processed at the bottom of the page.")
-
-    for cv in sorted_candidates.keys():
-        score_to_show = sorted_candidates[cv]['score'] if sorted_candidates[cv]['score'] != -1 else 'N/A'
-        with st.expander(f"{sorted_candidates[cv]['name']} - Score: {score_to_show}."):
-            text_col, buttons_col = st.columns([3, 1])
-            text_col.markdown(f"**Candidate's fit**")
-            text_col.write(f"{sorted_candidates[cv]['fit']}")
-            text_col.write(f"{sorted_candidates[cv]['speculation']}")
-            text_col.markdown(f"**CV summary**")
-            text_col.write(f"{sorted_candidates[cv]['summary']}")
-
-            buttons_col.write(f"{cv}")
-            buttons_col.download_button(
-                label="Download Original CV",
-                data=sorted_candidates[cv]['cv_file'],
-                file_name=cv,
-                mime="application/pdf"
-            )
-            ChangeButtonColour("Download Original CV", "#FFFFFF", "#1EC71E", "#1EC71E")
-
-            summary_file_text = (f"{sorted_candidates[cv]['name']} - Overall score: {score_to_show}.\n\n"
-                                 f"Candidate fit (requirements score: {sorted_candidates[cv]['requirement_score']}):\n"
-                                 f"{sorted_candidates[cv]['fit']}\n{sorted_candidates[cv]['speculation']}\n\n"
-                                 f"CV summary:\n{sorted_candidates[cv]['summary']}\n")
-            buttons_col.download_button(
-                label="Download Summary",
-                data=create_pdf(summary_file_text),
-                file_name='summary_' + cv,
-                mime="application/pdf"
-            )
-            ChangeButtonColour("Download Summary", "#FFFFFF", "#1EC71E", "#1EC71E")
-    df = pd.DataFrame.from_dict(sorted_candidates, orient='index')
-    df = df[['file_name', 'name', 'summary', 'requirement_score', 'fit', 'speculation', 'score']]
-    df['score'] = df['score'].apply(lambda x: 'N/A' if x == -1 else x)
-    df.columns = ['Original CV file name', 'Candidate name', 'CV summary', 'Requirements score',
-                  'Does the candidate fit the position?', 'Would the candidate succeed in the position', 'Final score']
-    download_all.download_button(
-        label="Download all as csv",
-        data=df.to_csv(index=False).encode('utf-8'),
-        file_name='cv_analysis.csv',
-        mime="text/csv"
+if screen == 'cvs':
+    applicants = st.session_state.applicants
+    job_description = st.session_state.job_description
+    if back_container.button("← BACK TO SETTINGS", key='back_to_settings'):
+        st.session_state.screen = 'settings'
+        st.rerun()
+    st.write("Candidates")
+    st.info(
+        "The matching score, ranging from 0 to 100, is an AI-generated metric that evaluates how well a candidate fits the job opening. It considers various factors from the candidate's application. Detailed reasoning for the score is provided.",
+        icon="ℹ️"
     )
-    ChangeButtonColour("Download all as csv", "#FFFFFF", "#1EC71E", "#1EC71E")
+    if "sorted_candidates" in st.session_state:
+        sorted_candidates = st.session_state['sorted_candidates']
+        errors = st.session_state['errors']
+        text = f"Analyzed {len(sorted_candidates)}/{len(applicants)} CV files. "
+        st.text(text)
+        if errors:
+            st.text("See files that couldn't be processed at the bottom of the page.")
+
+        for cv in sorted_candidates.keys():
+            score_to_show = sorted_candidates[cv]['score'] if sorted_candidates[cv]['score'] != -1 else 'N/A'
+            expander_label = f"""
+            <div>
+                <details>
+                    <summary>
+                        <div style='display: flex; align-items: center;'>
+                            <div style='margin:0px 0px; background-color: #82d582; border-radius: 5px; padding: 10px 15px; font-size: 24px; font-weight: bold; color: white;'>
+                                {score_to_show}
+                            </div>
+                            <div style='margin-left: 15px;'>
+                                <h2 style='margin: 0; padding: 0; font-size: 24px;'>{sorted_candidates[cv]['name']}</h2>
+                                <a href='{sorted_candidates[cv]['url']}' style='font-size: 14px; color: #2196F3;'>Open in Lever</a>
+                            </div>
+                        </div>
+                    </summary>
+                    <div>
+                        <div>
+                            <h4>Candidate's fit</h4>
+                            {sorted_candidates[cv]['fit']}
+                            <br>
+                            {sorted_candidates[cv]['speculation']}
+                        </div>
+                        <div>
+                            <h4>CV Summary</h4>
+                            {sorted_candidates[cv]['summary']}
+                        </div>
+                    </div>
+                </details>
+            </div>
+            """
+            #
+            with st.container(border=True):
+                st.markdown(expander_label, unsafe_allow_html=True)
+                st.markdown("""
+                                <style>
+                                    details > summary {
+                                        list-style: none;
+                                    }
+                                </style>
+                                """, unsafe_allow_html=True)
+
     if errors:
         st.write('Unable to process the following files')
         st.write(', '.join(map(str, errors)))
 
-    display_footer_section()
+display_footer_section()
