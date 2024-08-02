@@ -4,3 +4,4 @@ openai
 reportlab
 PyPDF2
 kbcstorage
+striprtf
