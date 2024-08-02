@@ -1,18 +1,22 @@
 # data-app-cv-ranker
-A plug-and-play application takes up to 70 CV pdf files and a job description (as a pdf or free text).  
+A plug-and-play application takes uploads job descriptions and candidates from the Lever component and lets the user choose the position he wants to analyze  
 The app analyzes the CVs using openAI and outputs ranked results by how much each candidate fits the job description.
 
 Requirements:
-- All CVs have to be pdfs
-- Job description is either text or PDF
+- All CVs have to be RTFs
 
-The app is built to support the Shopify component. 
-If the data should come from different component, either:
-- Transform the table to have the requirements
-- Add code for handling the new component in the load_data() function
+The app is built to use the Lever component tables. 
+Specifically:  
+- opportunities
+- applications
+- postings
+- resumes
 
-Secrets used:
+Secrets used:  
 openai_token - OpenAI API token (with access to the model you would like to use), currently set up with gpt-3.5-turbo  
+lever_token - Lever API token (to download the cvs)  
+kbc_url - Keboola url  
+kbc_token - Keboola token
 
 | Version |    Date    |       Description        |
 |---------|:----------:|:------------------------:|
