@@ -337,6 +337,7 @@ if screen == 'settings':
         for index, row in applicants.iterrows():
             cv_text = download_and_extract_rtf(row['file_downloadUrl'])
             cv_analysis = analyze_cv(cv_text, job_description)
+            print(row['name'])
             if cv_analysis is None:
                 errors.append(row['name'])
                 continue
@@ -344,7 +345,7 @@ if screen == 'settings':
                 'file_name': row['file_name'],
                 'url': row['urls_show_y'],
                 'cv_text': cv_text,
-                'name': cv_analysis['name'],
+                'name': row['name'],
                 'summary': cv_analysis['summary'],
                 'requirement_score': cv_analysis['score'],
                 "fit": cv_analysis['fit'],
@@ -390,29 +391,31 @@ if screen == 'cvs':
 
         for cv in sorted_candidates.keys():
             score_to_show = sorted_candidates[cv]['score'] if sorted_candidates[cv]['score'] != -1 else 'N/A'
+            # print(sorted_candidates[cv]['name'])
             expander_label = f"""
             <div>
                 <details>
-                    <summary>
+                    <summary style='display: flex; align-items: center;'>
                         <div style='display: flex; align-items: center;'>
                             <div style='margin:0px 0px; background-color: #82d582; border-radius: 5px; padding: 10px 15px; font-size: 24px; font-weight: bold; color: white;'>
                                 {score_to_show}
                             </div>
                             <div style='margin-left: 15px;'>
-                                <h2 style='margin: 0; padding: 0; font-size: 24px;'>{sorted_candidates[cv]['name']}</h2>
+                                <p style='margin: 0; padding: 0; font-weight: bold; font-size: 24px;'>{sorted_candidates[cv]['name']}</p>
                                 <a href='{sorted_candidates[cv]['url']}' style='font-size: 14px; color: #2196F3;'>Open in Lever</a>
                             </div>
                         </div>
+                        <span style="font-size: 18px; margin-left: auto; float: right;">&#9662;</span>
                     </summary>
                     <div>
                         <div>
-                            <h4>Candidate's fit</h4>
+                            <p style='margin: 0; padding: 0; font-weight: bold; font-size: 18px;'>Candidate's fit</p>
                             {sorted_candidates[cv]['fit']}
                             <br>
                             {sorted_candidates[cv]['speculation']}
                         </div>
                         <div>
-                            <h4>CV Summary</h4>
+                            <p style='margin: 0; padding: 0; font-weight: bold; font-size: 18px;'>CV Summary</p>
                             {sorted_candidates[cv]['summary']}
                         </div>
                     </div>
