@@ -242,18 +242,21 @@ def download_and_extract_rtf(url):
 
 
 def prepare_data():
-    print(lever_bucket)
     opportunities = get_dataframe(lever_bucket + '.opportunities')
     opportunities = opportunities[['id', 'name', 'urls_show']]
     applications = get_dataframe(lever_bucket + '.applications')
     applications = applications[['posting', 'opportunityId']]
     postings = get_dataframe(lever_bucket + '.postings')
     postings = postings[['id', 'content_description', 'state', 'text', 'urls_show']]
+    postings = postings[postings['state'] != 'closed']
     resumes = get_dataframe(lever_bucket + '.resumes')
     resumes = resumes[['opportunity_id', 'file_downloadUrl', 'file_name']]
     cvs = pd.merge(postings, applications, how='left', left_on=['id'], right_on=['posting'])
+    postings = cvs[cvs['posting'].notnull()][['id', 'content_description', 'state', 'text', 'urls_show']].copy()
+    postings.drop_duplicates(inplace=True, ignore_index=True)
     cvs = pd.merge(cvs, opportunities, how='left', left_on=['opportunityId'], right_on=['id'])
     cvs = pd.merge(cvs, resumes, how='left', left_on=['opportunityId'], right_on=['opportunity_id'])
+    cvs = cvs[cvs['opportunity_id'].notnull()]
     st.session_state.cvs = cvs
     st.session_state.postings = postings
 
@@ -338,7 +341,6 @@ if screen == 'settings':
         for index, row in applicants.iterrows():
             cv_text = download_and_extract_rtf(row['file_downloadUrl'])
             cv_analysis = analyze_cv(cv_text, job_description)
-            print(row['name'])
             if cv_analysis is None:
                 errors.append(row['name'])
                 continue
@@ -392,7 +394,6 @@ if screen == 'cvs':
 
         for cv in sorted_candidates.keys():
             score_to_show = sorted_candidates[cv]['score'] if sorted_candidates[cv]['score'] != -1 else 'N/A'
-            # print(sorted_candidates[cv]['name'])
             expander_label = f"""
             <div>
                 <details>
