@@ -20,7 +20,7 @@ openai_token = st.secrets["openai_token"]
 lever_token = st.secrets["lever_token"]
 kbc_url = st.secrets["kbc_url"]
 kbc_token = st.secrets["kbc_token"]
-lever_bucket = st.secrets["kbc_token"]
+lever_bucket = st.secrets["lever_bucket"]
 
 client = Client(kbc_url, kbc_token)
 LOGO_IMAGE_PATH = os.path.abspath("./app/static/keboola.png")
@@ -242,6 +242,7 @@ def download_and_extract_rtf(url):
 
 
 def prepare_data():
+    print(lever_bucket)
     opportunities = get_dataframe(lever_bucket + '.opportunities')
     opportunities = opportunities[['id', 'name', 'urls_show']]
     applications = get_dataframe(lever_bucket + '.applications')
@@ -249,10 +250,10 @@ def prepare_data():
     postings = get_dataframe(lever_bucket + '.postings')
     postings = postings[['id', 'content_description', 'state', 'text', 'urls_show']]
     resumes = get_dataframe(lever_bucket + '.resumes')
-    resumes = resumes[['parent_id', 'file_downloadUrl', 'file_name']]
+    resumes = resumes[['opportunity_id', 'file_downloadUrl', 'file_name']]
     cvs = pd.merge(postings, applications, how='left', left_on=['id'], right_on=['posting'])
     cvs = pd.merge(cvs, opportunities, how='left', left_on=['opportunityId'], right_on=['id'])
-    cvs = pd.merge(cvs, resumes, how='left', left_on=['opportunityId'], right_on=['parent_id'])
+    cvs = pd.merge(cvs, resumes, how='left', left_on=['opportunityId'], right_on=['opportunity_id'])
     st.session_state.cvs = cvs
     st.session_state.postings = postings
 
