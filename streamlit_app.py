@@ -20,13 +20,13 @@ openai_token = st.secrets["openai_token"]
 lever_token = st.secrets["lever_token"]
 kbc_url = st.secrets["kbc_url"]
 kbc_token = st.secrets["kbc_token"]
-lever_bucket = 'in.c-lever'
+lever_bucket = st.secrets["kbc_token"]
 
 client = Client(kbc_url, kbc_token)
 LOGO_IMAGE_PATH = os.path.abspath("./app/static/keboola.png")
 
 # Setting page config
-st.set_page_config(page_title="Keboola Resume Analyzer")
+st.set_page_config(page_title="Keboola Resume Analyzer", layout="wide")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
