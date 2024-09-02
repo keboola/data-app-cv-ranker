@@ -341,7 +341,7 @@ if screen == 'settings':
         for index, row in applicants.iterrows():
             cv_text = download_and_extract_rtf(row['file_downloadUrl'])
             cv_analysis = analyze_cv(cv_text, job_description)
-            if cv_analysis is None:
+            if cv_analysis is None or cv_text is None:
                 errors.append(row['name'])
                 continue
             candidates[row['file_name']] = {
