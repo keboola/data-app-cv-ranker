@@ -286,7 +286,7 @@ def prepare_data():
 
 
 # Streamlit app
-#st.image(LOGO_IMAGE_PATH)
+st.image(LOGO_IMAGE_PATH)
 hide_img_fs = """
         <style>
         button[title="View fullscreen"]{
