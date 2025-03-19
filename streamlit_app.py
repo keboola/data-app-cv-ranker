@@ -3,16 +3,18 @@ import pandas as pd
 import streamlit as st
 import PyPDF2
 import random
-from openai import OpenAI
+import base64
+import csv
+import requests
 import streamlit.components.v1 as components
 import os
+
+from openai import OpenAI
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from io import BytesIO
 from kbcstorage.client import Client
-import csv
-import requests
 from striprtf.striprtf import rtf_to_text
 
 
@@ -117,7 +119,10 @@ def get_openai_response(ai_setup, prompt, api_key):
 
     try:
         completion = open_ai_client.chat.completions.create(
-            model="gpt-3.5-turbo", messages=messages, temperature=0
+            model="gpt-4o", 
+            messages=messages, 
+            temperature=0,
+            response_format={"type": "json_object"}
         )
 
         message = completion.choices[0].message.content
@@ -229,17 +234,36 @@ def create_pdf(pdf_text):
 
 
 def download_and_extract_rtf(url):
-    headers = {
-        'authorization': lever_token
-    }
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        rtf_content = response.text
-        return rtf_to_text(rtf_content)
-    else:
-        print(f"Failed to download the file. Status code: {response.status_code}")
-        return None
+    try:
+        auth_string = f"{lever_token}:"
+        auth_bytes = auth_string.encode('ascii')
+        base64_auth = base64.b64encode(auth_bytes).decode('ascii')
+        auth_header = f"Basic {base64_auth}"
+            
+        headers = {
+            'Authorization': auth_header
+        }
+        response = requests.get(url, headers=headers)
 
+        if response.status_code == 200:
+            content_type = response.headers.get('content-type', '')
+            
+            if 'rtf' in content_type.lower():
+                rtf_content = response.text
+                return rtf_to_text(rtf_content)
+            elif 'pdf' in content_type.lower():
+                pdf_file = BytesIO(response.content)
+                return read_pdf(pdf_file)
+            else:
+                return response.text
+        else:
+            print(f"Failed to download the file. Status code: {response.status_code}")
+            print(f"Error message: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"Error downloading/processing file: {str(e)}")
+        return None
 
 def prepare_data():
     opportunities = get_dataframe(lever_bucket + '.opportunities')
